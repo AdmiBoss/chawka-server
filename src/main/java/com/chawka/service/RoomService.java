@@ -11,6 +11,8 @@ import java.util.concurrent.ConcurrentHashMap;
 @Service
 public class RoomService {
 
+    public static final long INVITE_TTL_MS = 2 * 60 * 1000L;
+
     private final Map<String, Room> rooms = new ConcurrentHashMap<>();
     /** Maps invite codes and open codes to room codes for fast lookup */
     private final Map<String, String> inviteIndex = new ConcurrentHashMap<>();
@@ -36,16 +38,37 @@ public class RoomService {
         return Optional.of(room);
     }
 
+    public static final class InviteCode {
+        private final String code;
+        private final long expiresAt;
+
+        public InviteCode(String code, long expiresAt) {
+            this.code = code;
+            this.expiresAt = expiresAt;
+        }
+
+        public String getCode() {
+            return code;
+        }
+
+        public long getExpiresAt() {
+            return expiresAt;
+        }
+    }
+
     /** Generate a one-time invite code for a room. Only the host should call this. */
-    public String generateInviteCode(String roomCode) {
+    public InviteCode generateInviteCode(String roomCode) {
         Room room = rooms.get(roomCode);
         if (room == null) {
             return null;
         }
+        cleanupExpiredInvites(roomCode, room);
+
         String invite = "inv-" + generateCode(10);
-        room.addInviteCode(invite);
+        long expiresAt = System.currentTimeMillis() + INVITE_TTL_MS;
+        room.addInviteCode(invite, expiresAt);
         inviteIndex.put(invite, roomCode);
-        return invite;
+        return new InviteCode(invite, expiresAt);
     }
 
     /** Generate or return the existing reusable open code for a room. */
@@ -78,6 +101,7 @@ public class RoomService {
         // One-time invite: consume it
         if (shareCode.startsWith("inv-")) {
             if (!room.consumeInviteCode(shareCode)) {
+                inviteIndex.remove(shareCode);
                 return Optional.empty(); // already used
             }
             inviteIndex.remove(shareCode);
@@ -122,5 +146,11 @@ public class RoomService {
             return generateCode(length);
         }
         return code;
+    }
+
+    private void cleanupExpiredInvites(String roomCode, Room room) {
+        inviteIndex.entrySet().removeIf(entry -> roomCode.equals(entry.getValue()) && entry.getKey().startsWith("inv-"));
+        room.removeExpiredInviteCodes(System.currentTimeMillis());
+        room.getInviteCodes().forEach(code -> inviteIndex.put(code, roomCode));
     }
 }

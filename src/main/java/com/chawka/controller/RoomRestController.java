@@ -67,11 +67,15 @@ public class RoomRestController {
     /** Generate a one-time invite code (host only) */
     @PostMapping("/{code}/invite")
     public ResponseEntity<Map<String, Object>> generateInvite(@PathVariable String code) {
-        String invite = roomService.generateInviteCode(code);
+        RoomService.InviteCode invite = roomService.generateInviteCode(code);
         if (invite == null) {
             return ResponseEntity.notFound().build();
         }
-        return ResponseEntity.ok(Map.of("inviteCode", invite));
+        return ResponseEntity.ok(Map.of(
+                "inviteCode", invite.getCode(),
+                "expiresAt", invite.getExpiresAt(),
+                "ttlMs", RoomService.INVITE_TTL_MS
+        ));
     }
 
     /** Get or create a reusable open code (host only) */

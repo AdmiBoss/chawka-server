@@ -10,8 +10,8 @@ public class Room {
     private final List<Participant> participants = new ArrayList<>();
     private Map<String, Object> sharedState;
 
-    /** One-time invite codes: code -> true (consumed codes are removed) */
-    private final Set<String> inviteCodes = ConcurrentHashMap.newKeySet();
+    /** One-time invite codes: code -> expiresAt epoch millis */
+    private final Map<String, Long> inviteCodes = new ConcurrentHashMap<>();
 
     /** Reusable open code (null = not generated yet) */
     private volatile String openCode;
@@ -34,15 +34,28 @@ public class Room {
     public String getOpenCode() { return openCode; }
     public void setOpenCode(String openCode) { this.openCode = openCode; }
 
-    public Set<String> getInviteCodes() { return inviteCodes; }
+    public Set<String> getInviteCodes() { return new HashSet<>(inviteCodes.keySet()); }
 
-    public void addInviteCode(String inviteCode) {
-        inviteCodes.add(inviteCode);
+    public void addInviteCode(String inviteCode, long expiresAt) {
+        inviteCodes.put(inviteCode, expiresAt);
+    }
+
+    public void removeExpiredInviteCodes(long now) {
+        inviteCodes.entrySet().removeIf(entry -> entry.getValue() <= now);
     }
 
     /** Consume a one-time invite code. Returns true if it was valid. */
     public boolean consumeInviteCode(String inviteCode) {
-        return inviteCodes.remove(inviteCode);
+        Long expiresAt = inviteCodes.get(inviteCode);
+        if (expiresAt == null) {
+            return false;
+        }
+        if (expiresAt <= System.currentTimeMillis()) {
+            inviteCodes.remove(inviteCode);
+            return false;
+        }
+        inviteCodes.remove(inviteCode);
+        return true;
     }
 
     public boolean isHost(String name) {
