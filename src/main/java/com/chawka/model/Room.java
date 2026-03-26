@@ -1,6 +1,7 @@
 package com.chawka.model;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class Room {
     private final String code;
@@ -8,6 +9,12 @@ public class Room {
     private final long createdAt;
     private final List<Participant> participants = new ArrayList<>();
     private Map<String, Object> sharedState;
+
+    /** One-time invite codes: code -> true (consumed codes are removed) */
+    private final Set<String> inviteCodes = ConcurrentHashMap.newKeySet();
+
+    /** Reusable open code (null = not generated yet) */
+    private volatile String openCode;
 
     public Room(String code, String hostName) {
         this.code = code;
@@ -23,6 +30,20 @@ public class Room {
     public List<Participant> getParticipants() { return participants; }
     public Map<String, Object> getSharedState() { return sharedState; }
     public void setSharedState(Map<String, Object> sharedState) { this.sharedState = sharedState; }
+
+    public String getOpenCode() { return openCode; }
+    public void setOpenCode(String openCode) { this.openCode = openCode; }
+
+    public Set<String> getInviteCodes() { return inviteCodes; }
+
+    public void addInviteCode(String inviteCode) {
+        inviteCodes.add(inviteCode);
+    }
+
+    /** Consume a one-time invite code. Returns true if it was valid. */
+    public boolean consumeInviteCode(String inviteCode) {
+        return inviteCodes.remove(inviteCode);
+    }
 
     public boolean isHost(String name) {
         return hostName.equals(name);
