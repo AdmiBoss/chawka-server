@@ -1,6 +1,8 @@
 package com.chawka.service;
 
 import com.chawka.model.Room;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.security.SecureRandom;
@@ -10,6 +12,8 @@ import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 public class RoomService {
+
+    private static final Logger log = LoggerFactory.getLogger(RoomService.class);
 
     public static final long INVITE_TTL_MS = 2 * 60 * 1000L;
 
@@ -22,6 +26,7 @@ public class RoomService {
         String code = generateCode(8);
         Room room = new Room(code, hostName);
         rooms.put(code, room);
+        log.debug("createRoom — code='{}', host='{}'", code, hostName);
         return room;
     }
 
@@ -32,9 +37,11 @@ public class RoomService {
     public Optional<Room> joinRoom(String code, String memberName) {
         Room room = rooms.get(code);
         if (room == null) {
+            log.debug("joinRoom — room '{}' not found", code);
             return Optional.empty();
         }
         room.addParticipant(memberName);
+        log.debug("joinRoom — '{}' joined room '{}'", memberName, code);
         return Optional.of(room);
     }
 
@@ -68,6 +75,7 @@ public class RoomService {
         long expiresAt = System.currentTimeMillis() + INVITE_TTL_MS;
         room.addInviteCode(invite, expiresAt);
         inviteIndex.put(invite, roomCode);
+        log.debug("generateInviteCode — room='{}', invite='{}'", roomCode, invite);
         return new InviteCode(invite, expiresAt);
     }
 
@@ -112,6 +120,7 @@ public class RoomService {
     }
 
     public void leaveRoom(String code, String memberName) {
+        log.debug("leaveRoom — code='{}', member='{}'", code, memberName);
         Room room = rooms.get(code);
         if (room == null) {
             return;

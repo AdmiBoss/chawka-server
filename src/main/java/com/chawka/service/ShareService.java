@@ -2,6 +2,8 @@ package com.chawka.service;
 
 import com.chawka.model.KhotbaShare;
 import com.chawka.model.RoqiaShare;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.util.*;
@@ -9,6 +11,8 @@ import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 public class ShareService {
+
+    private static final Logger log = LoggerFactory.getLogger(ShareService.class);
 
     private final Map<String, RoqiaShare> roqiaShares = new ConcurrentHashMap<>();
     private final Map<String, KhotbaShare> khotbaShares = new ConcurrentHashMap<>();
@@ -34,6 +38,7 @@ public class ShareService {
             share.setCreatedAt(System.currentTimeMillis());
         }
         roqiaShares.put(share.getId(), share);
+        log.debug("saveRoqia id='{}'", share.getId());
         return share;
     }
 
@@ -71,6 +76,7 @@ public class ShareService {
             share.setCreatedAt(System.currentTimeMillis());
         }
         khotbaShares.put(share.getId(), share);
+        log.debug("saveKhotba id='{}'", share.getId());
         return share;
     }
 

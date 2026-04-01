@@ -2,6 +2,8 @@ package com.chawka.controller;
 
 import com.chawka.model.Room;
 import com.chawka.service.RoomService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.messaging.handler.annotation.DestinationVariable;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.Payload;
@@ -13,6 +15,7 @@ import java.util.Map;
 @Controller
 public class RoomWsController {
 
+    private static final Logger log = LoggerFactory.getLogger(RoomWsController.class);
     private final SimpMessagingTemplate messaging;
     private final RoomService roomService;
 
@@ -28,6 +31,7 @@ public class RoomWsController {
      */
     @MessageMapping("/room/{code}/chat")
     public void handleChat(@DestinationVariable String code, @Payload Map<String, Object> message) {
+        log.debug("WS /room/{}/chat — from='{}'", code, message.get("from"));
         message.put("type", "chat");
         messaging.convertAndSend("/topic/room/" + code, message);
     }
@@ -39,6 +43,7 @@ public class RoomWsController {
     @MessageMapping("/room/{code}/join")
     public void handleJoin(@DestinationVariable String code, @Payload Map<String, Object> message) {
         String memberName = (String) message.get("from");
+        log.debug("WS /room/{}/join — member='{}'", code, memberName);
         if (memberName != null) {
             roomService.joinRoom(code, memberName);
         }
@@ -65,6 +70,7 @@ public class RoomWsController {
     @MessageMapping("/room/{code}/leave")
     public void handleLeave(@DestinationVariable String code, @Payload Map<String, Object> message) {
         String memberName = (String) message.get("from");
+        log.debug("WS /room/{}/leave — member='{}'", code, memberName);
         if (memberName != null) {
             roomService.leaveRoom(code, memberName);
         }
@@ -91,6 +97,7 @@ public class RoomWsController {
     @SuppressWarnings("unchecked")
     @MessageMapping("/room/{code}/state")
     public void handleState(@DestinationVariable String code, @Payload Map<String, Object> message) {
+        log.debug("WS /room/{}/state — updating room state", code);
         Object roomStateObj = message.get("roomState");
         if (roomStateObj instanceof Map) {
             roomService.updateRoomState(code, (Map<String, Object>) roomStateObj);
@@ -105,6 +112,7 @@ public class RoomWsController {
      */
     @MessageMapping("/room/{code}/hifdh-submit")
     public void handleHifdhSubmit(@DestinationVariable String code, @Payload Map<String, Object> message) {
+        log.debug("WS /room/{}/hifdh-submit — from='{}'", code, message.get("from"));
         message.put("type", "hifdh-submit");
         messaging.convertAndSend("/topic/room/" + code, message);
     }

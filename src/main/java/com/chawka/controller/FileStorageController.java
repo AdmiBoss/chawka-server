@@ -3,6 +3,8 @@ package com.chawka.controller;
 import com.chawka.model.StoredFileRecord;
 import com.chawka.service.FileMetadataService;
 import com.chawka.service.S3ObjectStorageService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.core.io.InputStreamResource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -21,6 +23,7 @@ import java.util.Map;
 @RequestMapping("/api/files")
 public class FileStorageController {
 
+    private static final Logger log = LoggerFactory.getLogger(FileStorageController.class);
     private final S3ObjectStorageService objectStorageService;
     private final FileMetadataService metadataService;
 
@@ -35,18 +38,22 @@ public class FileStorageController {
             @RequestParam(value = "keyPrefix", required = false) String keyPrefix,
             @RequestParam MultiValueMap<String, String> requestParams
     ) {
+        log.debug("POST /api/files — upload file='{}', size={}, keyPrefix='{}'", file.getOriginalFilename(), file.getSize(), keyPrefix);
         Map<String, String> userMetadata = extractUserMetadata(requestParams);
         S3ObjectStorageService.StoredObjectInfo storedObject = objectStorageService.upload(file, keyPrefix, userMetadata);
+        log.debug("File uploaded to S3: bucket='{}', key='{}'", storedObject.bucket(), storedObject.objectKey());
         return metadataService.saveNewRow(storedObject);
     }
 
     @GetMapping
     public List<StoredFileRecord> listFiles() {
+        log.debug("GET /api/files — listing all files");
         return metadataService.listRows();
     }
 
     @GetMapping("/{id}")
     public ResponseEntity<StoredFileRecord> getFileRow(@PathVariable String id) {
+        log.debug("GET /api/files/{}", id);
         return metadataService.getById(id)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
@@ -54,6 +61,7 @@ public class FileStorageController {
 
     @GetMapping("/{id}/content")
     public ResponseEntity<InputStreamResource> getFileContent(@PathVariable String id) {
+        log.debug("GET /api/files/{}/content", id);
         return metadataService.getById(id)
                 .map(row -> {
                     ResponseInputStream<GetObjectResponse> objectStream = objectStorageService.getObjectStream(
@@ -81,6 +89,7 @@ public class FileStorageController {
 
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteFile(@PathVariable String id) {
+        log.debug("DELETE /api/files/{}", id);
         return metadataService.deleteById(id)
                 .map(row -> {
                     objectStorageService.delete(row.getBucket(), row.getObjectKey());

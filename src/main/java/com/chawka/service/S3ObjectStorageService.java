@@ -1,6 +1,8 @@
 package com.chawka.service;
 
 import com.chawka.config.S3StorageProperties;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 import software.amazon.awssdk.core.sync.RequestBody;
@@ -20,6 +22,8 @@ import java.util.UUID;
 @Service
 public class S3ObjectStorageService {
 
+    private static final Logger log = LoggerFactory.getLogger(S3ObjectStorageService.class);
+
     public record StoredObjectInfo(String bucket, String objectKey, String originalFilename, String contentType, long size,
                                    Map<String, String> userMetadata) {
     }
@@ -37,6 +41,7 @@ public class S3ObjectStorageService {
         String originalFilename = file.getOriginalFilename() != null ? file.getOriginalFilename() : "file";
         String contentType = file.getContentType() != null ? file.getContentType() : "application/octet-stream";
         long size = file.getSize();
+        log.debug("upload — bucket='{}', file='{}', size={}, contentType='{}'", bucket, originalFilename, size, contentType);
 
         String keyPrefix = normalizePrefix(requestedPrefix != null && !requestedPrefix.isBlank()
                 ? requestedPrefix
@@ -54,6 +59,7 @@ public class S3ObjectStorageService {
                     .build();
 
             s3Client.putObject(putRequest, RequestBody.fromBytes(file.getBytes()));
+            log.debug("S3 upload complete — key='{}'", objectKey);
             return new StoredObjectInfo(bucket, objectKey, originalFilename, contentType, size, cleanedMetadata);
         } catch (IOException e) {
             throw new IllegalStateException("Failed to read uploaded file bytes", e);
@@ -64,6 +70,7 @@ public class S3ObjectStorageService {
         if (bucket == null || bucket.isBlank() || objectKey == null || objectKey.isBlank()) {
             return;
         }
+        log.debug("delete — bucket='{}', key='{}'", bucket, objectKey);
         DeleteObjectRequest deleteRequest = DeleteObjectRequest.builder()
                 .bucket(bucket)
                 .key(objectKey)
