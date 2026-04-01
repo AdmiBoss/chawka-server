@@ -1,0 +1,56 @@
+name: Deploy Server
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Build server JAR
+        run: mvn clean package -DskipTests
+
+      - name: Deploy to Lightsail
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+        run: |
+          # Write SSH key
+          mkdir -p ~/.ssh
+          echo "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "$SERVER_HOST" >> ~/.ssh/known_hosts
+
+          # Upload JAR
+          scp -i ~/.ssh/deploy_key \
+            target/chawka-server-1.0.0.jar \
+            "${SERVER_USER}@${SERVER_HOST}:~/chawka-server.jar"
+
+          # Rebuild and restart Docker container
+          ssh -i ~/.ssh/deploy_key "${SERVER_USER}@${SERVER_HOST}" << 'EOF'
+            cp ~/chawka-server.jar ~/chawka-server/app.jar
+            cd ~/chawka-server
+            sudo docker stop chawka-server
+            sudo docker rm chawka-server
+            sudo docker build --no-cache -t chawka-server:latest .
+            sudo docker run -d \
+              --name chawka-server \
+              -p 8080:8080 \
+              --restart unless-stopped \
+              chawka-server:latest
+            # Wait for startup and verify
+            sleep 8
+            curl -sf http://localhost:8080/api/dictionary > /dev/null && echo "Deploy OK" || echo "Deploy FAILED"
+          EOF
