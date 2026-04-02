@@ -19,7 +19,18 @@ jobs:
           distribution: 'temurin'
 
       - name: Build server JAR
-        run: mvn clean package -DskipTests
+        run: ./mvnw clean package -DskipTests
+
+      - name: Validate deploy secrets
+        run: |
+          missing=""
+          if [ -z "${{ secrets.SSH_PRIVATE_KEY }}" ]; then missing="$missing SSH_PRIVATE_KEY"; fi
+          if [ -z "${{ secrets.SERVER_HOST }}" ]; then missing="$missing SERVER_HOST"; fi
+          if [ -z "${{ secrets.SERVER_USER }}" ]; then missing="$missing SERVER_USER"; fi
+          if [ -n "$missing" ]; then
+            echo "::error::Missing required secrets:$missing"
+            exit 1
+          fi
 
       - name: Deploy to Lightsail
         env:
@@ -42,8 +53,8 @@ jobs:
           ssh -i ~/.ssh/deploy_key "${SERVER_USER}@${SERVER_HOST}" << 'EOF'
             cp ~/chawka-server.jar ~/chawka-server/app.jar
             cd ~/chawka-server
-            sudo docker stop chawka-server
-            sudo docker rm chawka-server
+            sudo docker stop chawka-server || true
+            sudo docker rm chawka-server || true
             sudo docker build --no-cache -t chawka-server:latest .
             sudo docker run -d \
               --name chawka-server \
