@@ -94,7 +94,8 @@ jobs:
             printf 'POSTGRES_PASSWORD=%s\nAWS_ACCESS_KEY_ID=%s\nAWS_SECRET_ACCESS_KEY=%s\n' \
               "${POSTGRES_PASSWORD}" "${AWS_ACCESS_KEY_ID}" "${AWS_SECRET_ACCESS_KEY}" > .env
 
-            sudo docker compose down
+            sudo docker compose down --remove-orphans || true
+            sudo docker rm -f chawka-server chawka-postgres 2>/dev/null || true
             sudo docker compose up -d --build
             sleep 15
             curl -sf http://localhost:8080/api/stats | grep -q '"status":"UP"' \
