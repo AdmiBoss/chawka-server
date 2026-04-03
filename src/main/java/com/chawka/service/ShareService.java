@@ -2,34 +2,39 @@ package com.chawka.service;
 
 import com.chawka.model.KhotbaShare;
 import com.chawka.model.RoqiaShare;
+import com.chawka.repository.KhotbaShareRepository;
+import com.chawka.repository.RoqiaShareRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 public class ShareService {
 
     private static final Logger log = LoggerFactory.getLogger(ShareService.class);
 
-    private final Map<String, RoqiaShare> roqiaShares = new ConcurrentHashMap<>();
-    private final Map<String, KhotbaShare> khotbaShares = new ConcurrentHashMap<>();
+    private final RoqiaShareRepository roqiaRepo;
+    private final KhotbaShareRepository khotbaRepo;
+
+    public ShareService(RoqiaShareRepository roqiaRepo, KhotbaShareRepository khotbaRepo) {
+        this.roqiaRepo = roqiaRepo;
+        this.khotbaRepo = khotbaRepo;
+    }
 
     // ── Roqia ──
 
     public List<RoqiaShare> getAllRoqia() {
-        List<RoqiaShare> list = new ArrayList<>(roqiaShares.values());
-        list.sort(Comparator.comparing(RoqiaShare::getSharedDate, Comparator.reverseOrder())
-                .thenComparing(Comparator.comparingLong(RoqiaShare::getCreatedAt).reversed()));
-        return list;
+        return roqiaRepo.findAllByOrderBySharedDateDescCreatedAtDesc();
     }
 
     public Optional<RoqiaShare> getRoqia(String id) {
-        return Optional.ofNullable(roqiaShares.get(id));
+        return roqiaRepo.findById(id);
     }
 
+    @Transactional
     public RoqiaShare saveRoqia(RoqiaShare share) {
         if (share.getId() == null || share.getId().isBlank()) {
             share.setId("roqia-" + System.currentTimeMillis() + "-" + randomSuffix());
@@ -37,37 +42,38 @@ public class ShareService {
         if (share.getCreatedAt() == 0) {
             share.setCreatedAt(System.currentTimeMillis());
         }
-        roqiaShares.put(share.getId(), share);
         log.debug("saveRoqia id='{}'", share.getId());
-        return share;
+        return roqiaRepo.save(share);
     }
 
+    @Transactional
     public boolean deleteRoqia(String id) {
-        return roqiaShares.remove(id) != null;
+        if (roqiaRepo.existsById(id)) {
+            roqiaRepo.deleteById(id);
+            return true;
+        }
+        return false;
     }
 
+    @Transactional
     public Optional<RoqiaShare> incrementRoqiaViews(String id) {
-        RoqiaShare share = roqiaShares.get(id);
-        if (share != null) {
+        return roqiaRepo.findById(id).map(share -> {
             share.setViewCount(share.getViewCount() + 1);
-            return Optional.of(share);
-        }
-        return Optional.empty();
+            return roqiaRepo.save(share);
+        });
     }
 
     // ── Khotba ──
 
     public List<KhotbaShare> getAllKhotba() {
-        List<KhotbaShare> list = new ArrayList<>(khotbaShares.values());
-        list.sort(Comparator.comparing(KhotbaShare::getSharedDate, Comparator.reverseOrder())
-                .thenComparing(Comparator.comparingLong(KhotbaShare::getCreatedAt).reversed()));
-        return list;
+        return khotbaRepo.findAllByOrderBySharedDateDescCreatedAtDesc();
     }
 
     public Optional<KhotbaShare> getKhotba(String id) {
-        return Optional.ofNullable(khotbaShares.get(id));
+        return khotbaRepo.findById(id);
     }
 
+    @Transactional
     public KhotbaShare saveKhotba(KhotbaShare share) {
         if (share.getId() == null || share.getId().isBlank()) {
             share.setId("khotba-" + System.currentTimeMillis() + "-" + randomSuffix());
@@ -75,13 +81,17 @@ public class ShareService {
         if (share.getCreatedAt() == 0) {
             share.setCreatedAt(System.currentTimeMillis());
         }
-        khotbaShares.put(share.getId(), share);
         log.debug("saveKhotba id='{}'", share.getId());
-        return share;
+        return khotbaRepo.save(share);
     }
 
+    @Transactional
     public boolean deleteKhotba(String id) {
-        return khotbaShares.remove(id) != null;
+        if (khotbaRepo.existsById(id)) {
+            khotbaRepo.deleteById(id);
+            return true;
+        }
+        return false;
     }
 
     private String randomSuffix() {

@@ -1,15 +1,30 @@
 package com.chawka.model;
 
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+
 import java.util.Map;
 
+@Entity
+@Table(name = "khotba_shares")
 public class KhotbaShare {
+
+    @Id
     private String id;
+
     private String fileRecordId;
     private String title;
     private String mosque;
     private String sharedDate;
+
+    @Column(columnDefinition = "TEXT")
     private String note;
+
+    @Column(columnDefinition = "TEXT")
     private String transcript;
+
     private long createdAt;
 
     public KhotbaShare() {}

@@ -1,10 +1,22 @@
 package com.chawka.model;
 
+import jakarta.persistence.Column;
+import jakarta.persistence.Convert;
+import jakarta.persistence.Entity;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+import com.chawka.config.StringMapConverter;
+
 import java.util.HashMap;
 import java.util.Map;
 
+@Entity
+@Table(name = "stored_file_records")
 public class StoredFileRecord {
+
+    @Id
     private String id;
+
     private String bucket;
     private String objectKey;
     private String originalFilename;
@@ -12,6 +24,9 @@ public class StoredFileRecord {
     private long size;
     private long createdAt;
     private long updatedAt;
+
+    @Convert(converter = StringMapConverter.class)
+    @Column(columnDefinition = "TEXT")
     private Map<String, String> userMetadata = new HashMap<>();
 
     public String getId() {

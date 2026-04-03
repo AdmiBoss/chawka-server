@@ -6,6 +6,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.security.SecureRandom;
+import java.util.Collection;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
@@ -142,6 +143,22 @@ public class RoomService {
         if (room != null) {
             room.setSharedState(newState);
         }
+    }
+
+    // ── Stats ──
+
+    public int getRoomCount() {
+        return rooms.size();
+    }
+
+    public int getTotalParticipants() {
+        return rooms.values().stream()
+                .mapToInt(r -> r.getParticipants().size())
+                .sum();
+    }
+
+    public Collection<Room> getAllRooms() {
+        return rooms.values();
     }
 
     private String generateCode(int length) {

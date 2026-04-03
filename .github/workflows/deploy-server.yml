@@ -5,7 +5,24 @@ on:
     branches: [main]
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Run tests
+        run: ./mvnw verify
+
   build-and-deploy:
+    needs: test
     runs-on: ubuntu-latest
 
     steps:
@@ -17,6 +34,7 @@ jobs:
         with:
           java-version: '17'
           distribution: 'temurin'
+          cache: 'maven'
 
       - name: Build server JAR
         run: ./mvnw clean package -DskipTests
@@ -34,34 +52,52 @@ jobs:
 
       - name: Deploy to Lightsail
         env:
-          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_PRIVATE_KEY_B64: ${{ secrets.SSH_PRIVATE_KEY }}
           SERVER_HOST: ${{ secrets.SERVER_HOST }}
           SERVER_USER: ${{ secrets.SERVER_USER }}
+          POSTGRES_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         run: |
-          # Write SSH key
           mkdir -p ~/.ssh
-          echo "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
+          chmod 700 ~/.ssh
+          echo "$SSH_PRIVATE_KEY_B64" | base64 -d > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
+
           ssh-keyscan -H "$SERVER_HOST" >> ~/.ssh/known_hosts
 
-          # Upload JAR
+          # Upload JAR + docker-compose + Dockerfile
           scp -i ~/.ssh/deploy_key \
             target/chawka-server-1.0.0.jar \
-            "${SERVER_USER}@${SERVER_HOST}:~/chawka-server.jar"
+            "${SERVER_USER}@${SERVER_HOST}:~/chawka-server/app.jar"
 
-          # Rebuild and restart Docker container
-          ssh -i ~/.ssh/deploy_key "${SERVER_USER}@${SERVER_HOST}" << 'EOF'
-            cp ~/chawka-server.jar ~/chawka-server/app.jar
+          scp -i ~/.ssh/deploy_key \
+            Dockerfile docker-compose.yml \
+            "${SERVER_USER}@${SERVER_HOST}:~/chawka-server/"
+
+          # Write .env and redeploy
+          ssh -i ~/.ssh/deploy_key "${SERVER_USER}@${SERVER_HOST}" bash -s << ENDSSH
+            set -e
             cd ~/chawka-server
-            sudo docker stop chawka-server || true
-            sudo docker rm chawka-server || true
-            sudo docker build --no-cache -t chawka-server:latest .
-            sudo docker run -d \
-              --name chawka-server \
-              -p 8080:8080 \
-              --restart unless-stopped \
-              chawka-server:latest
-            # Wait for startup and verify
-            sleep 8
-            curl -sf http://localhost:8080/api/dictionary > /dev/null && echo "Deploy OK" || echo "Deploy FAILED"
-          EOF
+
+            # Install Docker Compose plugin if not available
+            if ! sudo docker compose version &>/dev/null; then
+              echo "Installing Docker Compose plugin..."
+              sudo mkdir -p /usr/local/lib/docker/cli-plugins
+              COMPOSE_VERSION=v2.36.1
+              sudo curl -fsSL "https://github.com/docker/compose/releases/download/\${COMPOSE_VERSION}/docker-compose-\$(uname -s)-\$(uname -m)" \
+                -o /usr/local/lib/docker/cli-plugins/docker-compose
+              sudo chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+              sudo docker compose version
+            fi
+
+            printf 'POSTGRES_PASSWORD=%s\nAWS_ACCESS_KEY_ID=%s\nAWS_SECRET_ACCESS_KEY=%s\n' \
+              "${POSTGRES_PASSWORD}" "${AWS_ACCESS_KEY_ID}" "${AWS_SECRET_ACCESS_KEY}" > .env
+
+            sudo docker compose down
+            sudo docker compose up -d --build
+            sleep 15
+            curl -sf http://localhost:8080/api/stats | grep -q '"status":"UP"' \
+              && echo "Deploy OK" \
+              || { echo "Deploy FAILED"; sudo docker compose logs chawka-server --tail 30; exit 1; }
+          ENDSSH
