@@ -1,10 +1,23 @@
 package com.chawka.model;
 
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+
+@Entity
+@Table(name = "dictionary_entries")
 public class DictionaryEntry {
 
+    @Id
     private String id;
+
+    @Column(nullable = false)
     private String word;
+
+    @Column(columnDefinition = "TEXT")
     private String definition;
+
     private String author;
     private long createdAt;
     private int reputation;

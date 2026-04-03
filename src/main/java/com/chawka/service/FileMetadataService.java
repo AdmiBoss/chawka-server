@@ -1,24 +1,27 @@
 package com.chawka.service;
 
 import com.chawka.model.StoredFileRecord;
+import com.chawka.repository.StoredFileRecordRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
-import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 public class FileMetadataService {
 
     private static final Logger log = LoggerFactory.getLogger(FileMetadataService.class);
-    private final Map<String, StoredFileRecord> rows = new ConcurrentHashMap<>();
+    private final StoredFileRecordRepository repo;
 
+    public FileMetadataService(StoredFileRecordRepository repo) {
+        this.repo = repo;
+    }
+
+    @Transactional
     public StoredFileRecord saveNewRow(S3ObjectStorageService.StoredObjectInfo objectInfo) {
         log.debug("saveNewRow — file='{}', bucket='{}'", objectInfo.originalFilename(), objectInfo.bucket());
         long now = System.currentTimeMillis();
@@ -32,24 +35,23 @@ public class FileMetadataService {
         row.setCreatedAt(now);
         row.setUpdatedAt(now);
         row.setUserMetadata(objectInfo.userMetadata());
-
-        rows.put(row.getId(), row);
-        return row;
+        return repo.save(row);
     }
 
     public List<StoredFileRecord> listRows() {
-        log.debug("listRows — {} files stored", rows.size());
-        List<StoredFileRecord> list = new ArrayList<>(rows.values());
-        list.sort(Comparator.comparingLong(StoredFileRecord::getCreatedAt).reversed());
-        return list;
+        log.debug("listRows");
+        return repo.findAllByOrderByCreatedAtDesc();
     }
 
     public Optional<StoredFileRecord> getById(String id) {
-        return Optional.ofNullable(rows.get(id));
+        return repo.findById(id);
     }
 
+    @Transactional
     public Optional<StoredFileRecord> deleteById(String id) {
         log.debug("deleteById('{}') — removing file record", id);
-        return Optional.ofNullable(rows.remove(id));
+        Optional<StoredFileRecord> existing = repo.findById(id);
+        existing.ifPresent(repo::delete);
+        return existing;
     }
 }

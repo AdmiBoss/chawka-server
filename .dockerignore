@@ -1,5 +1,9 @@
 target/
 *.log
 .git
+.github
 .gitignore
 *.md
+*.pem
+*.key
+.env

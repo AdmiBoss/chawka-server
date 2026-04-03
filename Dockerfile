@@ -1,26 +1,29 @@
 # ── Stage 1: Build ────────────────────────────────────────────────────────────
-FROM eclipse-temurin:17-jdk-alpine AS builder
+FROM eclipse-temurin:17.0.13_11-jdk-alpine AS builder
 
 WORKDIR /build
 
 # Copy Maven wrapper and pom first for layer caching
 COPY mvnw.cmd mvnw pom.xml ./
-COPY .mvn .mvn 2>/dev/null || true
+COPY .mvn .mvn
 
 # Make wrapper executable (Linux inside container)
-RUN chmod +x mvnw 2>/dev/null || true
+RUN chmod +x mvnw
 
 # Download dependencies (cached unless pom.xml changes)
-RUN ./mvnw dependency:go-offline -q 2>/dev/null || \
-    apk add --no-cache maven && mvn dependency:go-offline -q
+RUN ./mvnw dependency:go-offline -q || \
+    (apk add --no-cache maven && mvn dependency:go-offline -q)
 
 # Copy source and build
 COPY src ./src
-RUN ./mvnw package -DskipTests -q 2>/dev/null || \
+RUN ./mvnw package -DskipTests -q || \
     mvn package -DskipTests -q
 
 # ── Stage 2: Runtime ──────────────────────────────────────────────────────────
-FROM eclipse-temurin:17-jre-alpine
+FROM eclipse-temurin:17.0.13_11-jre-alpine
+
+# Patch OS-level vulnerabilities
+RUN apk update && apk upgrade --no-cache && rm -rf /var/cache/apk/*
 
 WORKDIR /app
 
@@ -33,6 +36,9 @@ RUN chown chawka:chawka app.jar
 USER chawka
 
 EXPOSE 8080
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+  CMD wget -qO /dev/null http://localhost:8080/api/dictionary || exit 1
 
 # Pass env vars at runtime: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, APP_S3_BUCKET, etc.
 ENTRYPOINT ["java", "-jar", \

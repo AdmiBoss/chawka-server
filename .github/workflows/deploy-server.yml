@@ -29,28 +29,27 @@ jobs:
         run: |
           # Write SSH key
           mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
           echo "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -H "$SERVER_HOST" >> ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
 
-          # Upload JAR
+          # Upload JAR + docker-compose
           scp -i ~/.ssh/deploy_key \
             target/chawka-server-1.0.0.jar \
-            "${SERVER_USER}@${SERVER_HOST}:~/chawka-server.jar"
+            "${SERVER_USER}@${SERVER_HOST}:~/chawka-server/app.jar"
 
-          # Rebuild and restart Docker container
+          scp -i ~/.ssh/deploy_key \
+            Dockerfile docker-compose.yml \
+            "${SERVER_USER}@${SERVER_HOST}:~/chawka-server/"
+
+          # Rebuild and restart with docker-compose
           ssh -i ~/.ssh/deploy_key "${SERVER_USER}@${SERVER_HOST}" << 'EOF'
-            cp ~/chawka-server.jar ~/chawka-server/app.jar
             cd ~/chawka-server
-            sudo docker stop chawka-server
-            sudo docker rm chawka-server
-            sudo docker build --no-cache -t chawka-server:latest .
-            sudo docker run -d \
-              --name chawka-server \
-              -p 8080:8080 \
-              --restart unless-stopped \
-              chawka-server:latest
+            sudo docker compose down chawka-server
+            sudo docker compose up -d --build
             # Wait for startup and verify
-            sleep 8
+            sleep 12
             curl -sf http://localhost:8080/api/dictionary > /dev/null && echo "Deploy OK" || echo "Deploy FAILED"
           EOF
