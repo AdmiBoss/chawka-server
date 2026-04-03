@@ -38,7 +38,7 @@ USER chawka
 EXPOSE 8080
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-  CMD wget -qO /dev/null http://localhost:8080/api/dictionary || exit 1
+  CMD wget -qO /dev/null http://localhost:8080/api/stats || exit 1
 
 # Pass env vars at runtime: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, APP_S3_BUCKET, etc.
 ENTRYPOINT ["java", "-jar", \

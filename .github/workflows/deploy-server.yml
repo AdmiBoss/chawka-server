@@ -5,7 +5,23 @@ on:
     branches: [main]
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Run tests
+        run: mvn verify
+
   build-and-deploy:
+    needs: test
     runs-on: ubuntu-latest
 
     steps:
@@ -49,7 +65,7 @@ jobs:
             cd ~/chawka-server
             sudo docker compose down chawka-server
             sudo docker compose up -d --build
-            # Wait for startup and verify
+            # Wait for startup and verify via stats endpoint
             sleep 12
-            curl -sf http://localhost:8080/api/dictionary > /dev/null && echo "Deploy OK" || echo "Deploy FAILED"
+            curl -sf http://localhost:8080/api/stats | grep -q '"status":"UP"' && echo "Deploy OK" || echo "Deploy FAILED"
           EOF
