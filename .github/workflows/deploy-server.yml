@@ -19,7 +19,7 @@ jobs:
           cache: 'maven'
 
       - name: Run tests
-        run: mvn verify
+        run: ./mvnw verify
 
   build-and-deploy:
     needs: test
@@ -37,7 +37,18 @@ jobs:
           cache: 'maven'
 
       - name: Build server JAR
-        run: mvn clean package -DskipTests
+        run: ./mvnw clean package -DskipTests
+
+      - name: Validate deploy secrets
+        run: |
+          missing=""
+          if [ -z "${{ secrets.SSH_PRIVATE_KEY }}" ]; then missing="$missing SSH_PRIVATE_KEY"; fi
+          if [ -z "${{ secrets.SERVER_HOST }}" ]; then missing="$missing SERVER_HOST"; fi
+          if [ -z "${{ secrets.SERVER_USER }}" ]; then missing="$missing SERVER_USER"; fi
+          if [ -n "$missing" ]; then
+            echo "::error::Missing required secrets:$missing"
+            exit 1
+          fi
 
       - name: Deploy to Lightsail
         env:
@@ -55,7 +66,7 @@ jobs:
 
           ssh-keyscan -H "$SERVER_HOST" >> ~/.ssh/known_hosts
 
-          # Upload JAR + docker-compose
+          # Upload JAR + docker-compose + Dockerfile
           scp -i ~/.ssh/deploy_key \
             target/chawka-server-1.0.0.jar \
             "${SERVER_USER}@${SERVER_HOST}:~/chawka-server/app.jar"
