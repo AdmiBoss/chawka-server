@@ -37,35 +37,29 @@ jobs:
       - name: Build server JAR
         run: mvn clean package -DskipTests
 
+      - name: Set up SSH agent
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
       - name: Deploy to Lightsail
         env:
-          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
           SERVER_HOST: ${{ secrets.SERVER_HOST }}
           SERVER_USER: ${{ secrets.SERVER_USER }}
         run: |
-          # Write SSH key
-          mkdir -p ~/.ssh
-          chmod 700 ~/.ssh
-          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-
-          # Validate key format
-          ssh-keygen -y -f ~/.ssh/deploy_key > /dev/null || { echo "ERROR: Invalid SSH key format"; exit 1; }
-
           ssh-keyscan -H "$SERVER_HOST" >> ~/.ssh/known_hosts
-          chmod 644 ~/.ssh/known_hosts
 
           # Upload JAR + docker-compose
-          scp -i ~/.ssh/deploy_key \
+          scp \
             target/chawka-server-1.0.0.jar \
             "${SERVER_USER}@${SERVER_HOST}:~/chawka-server/app.jar"
 
-          scp -i ~/.ssh/deploy_key \
+          scp \
             Dockerfile docker-compose.yml \
             "${SERVER_USER}@${SERVER_HOST}:~/chawka-server/"
 
           # Rebuild and restart with docker-compose
-          ssh -i ~/.ssh/deploy_key "${SERVER_USER}@${SERVER_HOST}" << 'EOF'
+          ssh "${SERVER_USER}@${SERVER_HOST}" << 'EOF'
             cd ~/chawka-server
             sudo docker compose down chawka-server
             sudo docker compose up -d --build
