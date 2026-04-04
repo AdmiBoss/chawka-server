@@ -19,7 +19,7 @@ jobs:
           cache: 'maven'
 
       - name: Run tests
-        run: mvn verify
+        run: ./mvnw verify
 
   build-and-deploy:
     needs: test
@@ -37,7 +37,18 @@ jobs:
           cache: 'maven'
 
       - name: Build server JAR
-        run: mvn clean package -DskipTests
+        run: ./mvnw clean package -DskipTests
+
+      - name: Validate deploy secrets
+        run: |
+          missing=""
+          if [ -z "${{ secrets.SSH_PRIVATE_KEY }}" ]; then missing="$missing SSH_PRIVATE_KEY"; fi
+          if [ -z "${{ secrets.SERVER_HOST }}" ]; then missing="$missing SERVER_HOST"; fi
+          if [ -z "${{ secrets.SERVER_USER }}" ]; then missing="$missing SERVER_USER"; fi
+          if [ -n "$missing" ]; then
+            echo "::error::Missing required secrets:$missing"
+            exit 1
+          fi
 
       - name: Deploy to Lightsail
         env:
@@ -55,7 +66,7 @@ jobs:
 
           ssh-keyscan -H "$SERVER_HOST" >> ~/.ssh/known_hosts
 
-          # Upload JAR + docker-compose
+          # Upload JAR + docker-compose + Dockerfile
           scp -i ~/.ssh/deploy_key \
             target/chawka-server-1.0.0.jar \
             "${SERVER_USER}@${SERVER_HOST}:~/chawka-server/app.jar"
@@ -68,13 +79,25 @@ jobs:
           ssh -i ~/.ssh/deploy_key "${SERVER_USER}@${SERVER_HOST}" bash -s << ENDSSH
             set -e
             cd ~/chawka-server
+
+            # Install Docker Compose plugin if not available
+            if ! sudo docker compose version &>/dev/null; then
+              echo "Installing Docker Compose plugin..."
+              sudo mkdir -p /usr/local/lib/docker/cli-plugins
+              COMPOSE_VERSION=v2.36.1
+              sudo curl -fsSL "https://github.com/docker/compose/releases/download/\${COMPOSE_VERSION}/docker-compose-\$(uname -s)-\$(uname -m)" \
+                -o /usr/local/lib/docker/cli-plugins/docker-compose
+              sudo chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+              sudo docker compose version
+            fi
+
             printf 'POSTGRES_PASSWORD=%s\nAWS_ACCESS_KEY_ID=%s\nAWS_SECRET_ACCESS_KEY=%s\n' \
               "${POSTGRES_PASSWORD}" "${AWS_ACCESS_KEY_ID}" "${AWS_SECRET_ACCESS_KEY}" > .env
             sudo docker stop chawka-server 2>/dev/null || true
             sudo docker rm chawka-server 2>/dev/null || true
-            sudo docker-compose up -d --build
+            sudo docker compose up -d --build
             sleep 15
             curl -sf http://localhost:8080/api/stats | grep -q '"status":"UP"' \
               && echo "Deploy OK" \
-              || { echo "Deploy FAILED"; sudo docker logs chawka-server --tail 30; exit 1; }
+              || { echo "Deploy FAILED"; sudo docker compose logs chawka-server --tail 30; exit 1; }
           ENDSSH

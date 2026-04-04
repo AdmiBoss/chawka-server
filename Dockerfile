@@ -1,25 +1,6 @@
-# ── Stage 1: Build ────────────────────────────────────────────────────────────
-FROM eclipse-temurin:17.0.13_11-jdk-alpine AS builder
-
-WORKDIR /build
-
-# Copy Maven wrapper and pom first for layer caching
-COPY mvnw.cmd mvnw pom.xml ./
-COPY .mvn .mvn
-
-# Make wrapper executable (Linux inside container)
-RUN chmod +x mvnw
-
-# Download dependencies (cached unless pom.xml changes)
-RUN ./mvnw dependency:go-offline -q || \
-    (apk add --no-cache maven && mvn dependency:go-offline -q)
-
-# Copy source and build
-COPY src ./src
-RUN ./mvnw package -DskipTests -q || \
-    mvn package -DskipTests -q
-
-# ── Stage 2: Runtime ──────────────────────────────────────────────────────────
+# ── Runtime image ─────────────────────────────────────────────────────────────
+# The CI pipeline builds the JAR and uploads it as app.jar.
+# This Dockerfile simply packages it into a minimal runtime container.
 FROM eclipse-temurin:17.0.13_11-jre-alpine
 
 # Patch OS-level vulnerabilities
@@ -30,7 +11,7 @@ WORKDIR /app
 # Create non-root user for security
 RUN addgroup -S chawka && adduser -S chawka -G chawka
 
-COPY --from=builder /build/target/chawka-server-*.jar app.jar
+COPY app.jar app.jar
 
 RUN chown chawka:chawka app.jar
 USER chawka
