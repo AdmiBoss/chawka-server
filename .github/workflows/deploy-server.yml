@@ -45,6 +45,7 @@ jobs:
           if [ -z "${{ secrets.SSH_PRIVATE_KEY }}" ]; then missing="$missing SSH_PRIVATE_KEY"; fi
           if [ -z "${{ secrets.SERVER_HOST }}" ]; then missing="$missing SERVER_HOST"; fi
           if [ -z "${{ secrets.SERVER_USER }}" ]; then missing="$missing SERVER_USER"; fi
+          if [ -z "${{ secrets.DB_PASSWORD }}" ]; then missing="$missing DB_PASSWORD"; fi
           if [ -n "$missing" ]; then
             echo "::error::Missing required secrets:$missing"
             exit 1
