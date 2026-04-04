@@ -93,8 +93,9 @@ jobs:
 
             printf 'POSTGRES_PASSWORD=%s\nAWS_ACCESS_KEY_ID=%s\nAWS_SECRET_ACCESS_KEY=%s\n' \
               "${POSTGRES_PASSWORD}" "${AWS_ACCESS_KEY_ID}" "${AWS_SECRET_ACCESS_KEY}" > .env
-            sudo docker stop chawka-server 2>/dev/null || true
-            sudo docker rm chawka-server 2>/dev/null || true
+            # Remove all manually-created containers so compose can manage them
+            sudo docker stop chawka-server chawka-postgres postgres 2>/dev/null || true
+            sudo docker rm chawka-server chawka-postgres postgres 2>/dev/null || true
             sudo docker compose up -d --build
             sleep 15
             curl -sf http://localhost:8080/api/stats | grep -q '"status":"UP"' \
