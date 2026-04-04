@@ -1,12 +1,14 @@
 package com.chawka.service;
 
 import com.chawka.model.Room;
+import com.chawka.repository.RoomRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.*;
 
 class RoomServiceTest {
 
@@ -14,7 +16,7 @@ class RoomServiceTest {
 
     @BeforeEach
     void setUp() {
-        roomService = new RoomService();
+        roomService = new RoomService(mock(RoomRepository.class));
     }
 
     @Test
