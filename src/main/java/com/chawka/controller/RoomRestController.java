@@ -1,13 +1,17 @@
 package com.chawka.controller;
 
 import com.chawka.model.Room;
+import com.chawka.model.RoomRecord;
 import com.chawka.service.RoomService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/rooms")
@@ -23,17 +27,55 @@ public class RoomRestController {
     @PostMapping("/create")
     public ResponseEntity<Map<String, Object>> createRoom(@RequestBody Map<String, String> body) {
         String hostName = body.get("hostName");
+        String hostPhone = body.get("hostPhone");
+        String pin = body.get("pin");
         log.debug("POST /api/rooms/create — hostName='{}'", hostName);
         if (hostName == null || hostName.isBlank()) {
             return ResponseEntity.badRequest().body(Map.of("error", "hostName required"));
         }
-        Room room = roomService.createRoom(hostName.trim());
+        Room room = roomService.createRoom(hostName.trim(), hostPhone, pin);
         log.debug("Room created: code='{}'", room.getCode());
         return ResponseEntity.ok(Map.of(
                 "code", room.getCode(),
                 "participants", room.getParticipants(),
                 "roomState", room.getSharedState()
         ));
+    }
+
+    @PostMapping("/admin/login")
+    public ResponseEntity<?> adminLogin(@RequestBody Map<String, String> body) {
+        String phone = body.get("phone");
+        String pin = body.get("pin");
+        if (phone == null || phone.isBlank() || pin == null || pin.isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "phone and pin required"));
+        }
+        List<RoomRecord> rooms = roomService.getAdminRooms(phone, pin);
+        List<Map<String, Object>> result = rooms.stream().map(r -> {
+            Map<String, Object> m = new HashMap<>();
+            m.put("code", r.getCode());
+            m.put("hostName", r.getHostName());
+            m.put("createdAt", r.getCreatedAt());
+            m.put("lastActive", r.getLastActive());
+            return m;
+        }).collect(Collectors.toList());
+        return ResponseEntity.ok(result);
+    }
+
+    @PostMapping("/admin/reconnect")
+    public ResponseEntity<Map<String, Object>> adminReconnect(@RequestBody Map<String, String> body) {
+        String code = body.get("code");
+        String phone = body.get("phone");
+        String pin = body.get("pin");
+        if (code == null || phone == null || pin == null) {
+            return ResponseEntity.badRequest().body(Map.of("error", "code, phone and pin required"));
+        }
+        return roomService.reconnectAdminRoom(code.trim(), phone, pin)
+                .map(room -> ResponseEntity.ok(Map.<String, Object>of(
+                        "code", room.getCode(),
+                        "participants", room.getParticipants(),
+                        "roomState", room.getSharedState()
+                )))
+                .orElse(ResponseEntity.status(403).body(Map.of("error", "Invalid credentials or room not found")));
     }
 
     @PostMapping("/join")

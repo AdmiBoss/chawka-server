@@ -1,15 +1,23 @@
 package com.chawka.service;
 
 import com.chawka.model.Room;
+import com.chawka.model.RoomRecord;
+import com.chawka.repository.RoomRepository;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.security.SecureRandom;
 import java.util.Collection;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 @Service
 public class RoomService {
@@ -22,13 +30,74 @@ public class RoomService {
     /** Maps invite codes and open codes to room codes for fast lookup */
     private final Map<String, String> inviteIndex = new ConcurrentHashMap<>();
     private final SecureRandom random = new SecureRandom();
+    private final RoomRepository roomRepository;
+    private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
-    public Room createRoom(String hostName) {
+    public RoomService(RoomRepository roomRepository) {
+        this.roomRepository = roomRepository;
+    }
+
+    public Room createRoom(String hostName, String hostPhone, String pin) {
         String code = generateCode(8);
         Room room = new Room(code, hostName);
         rooms.put(code, room);
         log.debug("createRoom — code='{}', host='{}'", code, hostName);
+
+        if (hostPhone != null && !hostPhone.isBlank() && pin != null && !pin.isBlank()) {
+            RoomRecord record = new RoomRecord();
+            record.setCode(code);
+            record.setHostName(hostName);
+            record.setHostPhone(hostPhone.trim());
+            record.setHostPinHash(passwordEncoder.encode(pin));
+            record.setCreatedAt(room.getCreatedAt());
+            record.setLastActive(room.getCreatedAt());
+            record.setRoomActive(true);
+            record.setSharedStateJson("{}");
+            roomRepository.save(record);
+        }
+
         return room;
+    }
+
+    public Room createRoom(String hostName) {
+        return createRoom(hostName, null, null);
+    }
+
+    public List<RoomRecord> getAdminRooms(String phone, String pin) {
+        List<RoomRecord> records = roomRepository.findByHostPhoneAndRoomActiveTrue(phone.trim());
+        return records.stream()
+                .filter(r -> passwordEncoder.matches(pin, r.getHostPinHash()))
+                .collect(Collectors.toList());
+    }
+
+    public Optional<Room> reconnectAdminRoom(String code, String phone, String pin) {
+        RoomRecord record = roomRepository.findById(code).orElse(null);
+        if (record == null || !record.isRoomActive()) {
+            return Optional.empty();
+        }
+        if (!phone.trim().equals(record.getHostPhone()) || !passwordEncoder.matches(pin, record.getHostPinHash())) {
+            return Optional.empty();
+        }
+
+        Room room = rooms.computeIfAbsent(code, k -> {
+            Room r = new Room(k, record.getHostName());
+            String json = record.getSharedStateJson();
+            if (json != null && !json.isBlank() && !"{}" .equals(json)) {
+                try {
+                    Map<String, Object> state = objectMapper.readValue(json, new TypeReference<Map<String, Object>>() {});
+                    r.setSharedState(state);
+                } catch (Exception e) {
+                    log.warn("Failed to restore room state for {}: {}", code, e.getMessage());
+                }
+            }
+            return r;
+        });
+
+        record.setLastActive(System.currentTimeMillis());
+        roomRepository.save(record);
+
+        return Optional.of(room);
     }
 
     public Optional<Room> getRoom(String code) {
@@ -127,6 +196,16 @@ public class RoomService {
             return;
         }
         if (room.isHost(memberName)) {
+            // Persist final state to DB before removal
+            roomRepository.findById(code).ifPresent(record -> {
+                try {
+                    record.setSharedStateJson(objectMapper.writeValueAsString(room.getSharedState()));
+                    record.setLastActive(System.currentTimeMillis());
+                    roomRepository.save(record);
+                } catch (Exception e) {
+                    log.warn("Failed to persist room state on leave for {}", code);
+                }
+            });
             // Clean up all invite/open codes for this room
             room.getInviteCodes().forEach(inviteIndex::remove);
             if (room.getOpenCode() != null) {
@@ -142,6 +221,15 @@ public class RoomService {
         Room room = rooms.get(code);
         if (room != null) {
             room.setSharedState(newState);
+            roomRepository.findById(code).ifPresent(record -> {
+                try {
+                    record.setSharedStateJson(objectMapper.writeValueAsString(newState));
+                    record.setLastActive(System.currentTimeMillis());
+                    roomRepository.save(record);
+                } catch (Exception e) {
+                    log.warn("Failed to persist room state for {}", code);
+                }
+            });
         }
     }
 
